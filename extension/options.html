@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>Essentials — Your saved tabs</title>
+    <link rel="icon" type="image/png" href="icons/32.png">
+    <link rel="stylesheet" href="options.css">
+    <script type="module" src="options.js"></script>
+  </head>
+  <body>
+    <main class="workspace">
+      <header class="page-header">
+        <div class="heading-line">
+          <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+          <h1>Essentials</h1>
+        </div>
+        <p class="intro">Saved groups for your everyday tabs.</p>
+        <p class="toolbar-hint">The toolbar button opens Essentials. Launch your other groups here or from the extension’s right-click menu.</p>
+      </header>
+
+      <section class="groups-section" aria-labelledby="groups-heading">
+        <h2 id="groups-heading" class="eyebrow">Your groups</h2>
+        <nav id="group-picker" class="group-picker" aria-label="Saved tab groups"></nav>
+        <details id="new-group-details" class="new-group-details">
+          <summary>New group</summary>
+          <form id="new-group-form" class="new-group-form">
+            <div class="field">
+              <label for="new-group-name">Group name</label>
+              <input id="new-group-name" type="text" required maxlength="60" placeholder="For example, Research" autocomplete="off" disabled>
+            </div>
+            <div class="field">
+              <label for="new-group-color">Color</label>
+              <select id="new-group-color" disabled></select>
+            </div>
+            <button id="create-group" class="button button-secondary" type="submit" disabled>Create group</button>
+          </form>
+        </details>
+      </section>
+
+      <section class="selected-group" aria-labelledby="current-group-title">
+        <div class="heading-line selected-heading">
+          <span id="selected-color" class="color-dot" data-color="blue" aria-hidden="true"></span>
+          <h2 id="current-group-title">Essentials</h2>
+          <span id="group-status" class="group-status">Loading</span>
+        </div>
+        <div class="launch-actions">
+          <button id="launch" class="button button-primary" type="button" disabled>Launch Essentials</button>
+          <button id="close" class="button button-quiet" type="button" disabled>Close Essentials</button>
+        </div>
+        <details id="group-settings" class="group-settings">
+          <summary>Group settings</summary>
+          <form id="group-settings-form">
+            <div class="group-settings-grid">
+              <div class="field">
+                <label for="group-name">Group name</label>
+                <input id="group-name" type="text" required maxlength="60" autocomplete="off" aria-describedby="group-name-hint" disabled>
+                <p id="group-name-hint" class="field-hint" hidden>Essentials is your permanent primary group.</p>
+              </div>
+              <div class="field">
+                <label for="group-color">Color</label>
+                <select id="group-color" disabled></select>
+              </div>
+              <div class="drop-setting">
+                <label class="checkbox-label" for="accept-drops"><input id="accept-drops" type="checkbox" aria-describedby="drop-hint" disabled><span>Save tabs dropped into this group</span></label>
+                <p id="drop-hint" class="field-hint">Tabs are saved after the drop settles; passing over the group does not save them. Turn this off to use Add commands only.</p>
+              </div>
+            </div>
+            <div class="edit-actions">
+              <button id="save-group" class="button button-secondary" type="submit" disabled>Save group settings</button>
+              <button id="cancel-group" class="button button-quiet" type="button" disabled>Cancel</button>
+              <span id="group-edit-state" class="edit-state"></span>
+              <button id="delete-group" class="text-button delete-group" type="button" hidden disabled>Delete group</button>
+            </div>
+          </form>
+        </details>
+      </section>
+
+      <p id="feedback" class="feedback" role="status" aria-live="polite" aria-atomic="true"></p>
+      <div id="warning" class="warning" role="status" hidden></div>
+
+      <section class="saved-section" aria-labelledby="saved-heading">
+        <div class="section-heading">
+          <h2 id="saved-heading">Saved tabs <span id="entry-count" class="count"></span></h2>
+          <span class="section-caption">Order saves automatically</span>
+        </div>
+        <ol id="entries" class="entry-list"></ol>
+        <div id="empty" class="empty-state" hidden>
+          <p class="empty-title">Start with a tab you use every day.</p>
+          <p id="empty-help">Add an open tab below, or enter a website address. Once the group is running, you can also drop tabs into it to save them.</p>
+        </div>
+      </section>
+
+      <section class="add-section" aria-labelledby="add-heading">
+        <h2 id="add-heading">Add a tab</h2>
+        <form id="add-tab-form" class="add-tab-form">
+          <label for="open-tabs">Choose an open tab</label>
+          <div class="input-action-row">
+            <select id="open-tabs" required disabled>
+              <option value="">Loading open tabs…</option>
+            </select>
+            <button id="add-tab" class="button button-secondary" type="submit" disabled>Add tab</button>
+          </div>
+          <button id="refresh-tabs" class="text-button" type="button" disabled>Refresh open tabs</button>
+        </form>
+        <details id="add-address-details" class="add-address">
+          <summary>Or add a website address</summary>
+          <form id="add-url-form" class="add-url-form">
+            <div class="field">
+              <label for="new-url">Website address</label>
+              <input id="new-url" type="url" placeholder="https://app.example.com" required autocomplete="off" spellcheck="false" disabled>
+            </div>
+            <div class="field">
+              <label for="new-label">Name <span class="optional">optional</span></label>
+              <input id="new-label" type="text" maxlength="100" placeholder="A name you recognize" autocomplete="off" disabled>
+            </div>
+            <button id="add-url" class="button button-secondary" type="submit" disabled>Save website</button>
+          </form>
+        </details>
+        <p class="section-note">You can also right-click a tab and choose a group from <strong>Add this tab to saved group</strong>.</p>
+      </section>
+
+      <aside class="behavior-help" aria-labelledby="behavior-heading">
+        <h2 id="behavior-heading">Make the group your own</h2>
+        <dl>
+          <div><dt>Drop in to save</dt><dd>Drop a tab into a group and leave it there to save it. Passing over a group won’t add it. Rearranging saved tabs remembers their order.</dd></div>
+          <div><dt>Pull out to keep browsing</dt><dd>A tab you move out stays open. Its saved group replaces it with its last valid address.</dd></div>
+          <div><dt>Keep your groups first</dt><dd>Essentials stays first after pinned tabs. Your other saved groups follow, ahead of ordinary browsing.</dd></div>
+        </dl>
+        <p class="section-note">Leaving an allowed website moves that tab outside the group and restores its last valid address. Use Remove to stop saving one tab and leave its page open, or Close to stop the whole group intentionally. New tabs stay outside by default.</p>
+      </aside>
+      <footer>Saved on this Chrome profile. Groups open when you ask for them.</footer>
+    </main>
+    <dialog id="delete-dialog" aria-labelledby="delete-heading" aria-describedby="delete-description">
+      <h2 id="delete-heading">Delete group?</h2>
+      <p id="delete-description"></p>
+      <div class="dialog-actions">
+        <button id="cancel-delete" class="button button-quiet" type="button">Cancel</button>
+        <button id="confirm-delete" class="button button-danger" type="button">Delete group</button>
+      </div>
+    </dialog>
+  </body>
+</html>

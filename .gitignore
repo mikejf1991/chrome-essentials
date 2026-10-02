@@ -1,0 +1,23 @@
+node_modules/
+output/
+dist/
+*.log
+.playwright-cli/
+
+# Private development records stay on the local machine.
+/AGENT.MD
+/AGENTS.md
+/PROJECT_STATE.md
+/IMPLEMENTATION.md
+/logs/
+/scripts/log-turn.sh
+/.private/
+
+# Credentials and local history backups must not be published.
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.bundle

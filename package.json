@@ -1,0 +1,16 @@
+{
+  "name": "chrome-essentials",
+  "version": "0.2.1",
+  "private": true,
+  "type": "module",
+  "description": "On-demand, self-restoring saved tab groups for Chrome.",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "test:browser": "node scripts/browser-smoke.mjs",
+    "test:groups": "node scripts/groups-smoke.mjs",
+    "test:reload": "node scripts/reload-smoke.mjs",
+    "check": "node scripts/check.mjs",
+    "package": "python scripts/package.py"
+  },
+  "devDependencies": {"playwright": "1.62.1"}
+}
