@@ -2,12 +2,16 @@ import { createServer } from 'node:http';
 
 // Separate loopback hostnames exercise real browser navigation without app logins.
 export async function startFixtureSites() {
-  const server = createServer((request, response) => {
+  const held = new Map();
+  const server = createServer(async (request, response) => {
     const { port } = server.address();
     const base = `http://app.localhost:${port}`;
     const outside = `http://outside.localhost:${port}`;
     const auth = `http://auth.localhost:${port}`;
     const url = new URL(request.url, `http://${request.headers.host}`);
+    const gate = held.get(url.pathname);
+    if (gate) { gate.requested = true; await gate.ready; }
+    if (response.destroyed) return;
     response.setHeader('Cache-Control', 'no-store');
     if (url.pathname === '/needs-auth') {
       response.writeHead(302, { Location: `${auth}/login` });
@@ -45,6 +49,11 @@ export async function startFixtureSites() {
     app: `http://app.localhost:${port}`,
     outside: `http://outside.localhost:${port}`,
     auth: `http://auth.localhost:${port}`,
-    close: () => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve())),
+    hold: path => {
+      let release;
+      const gate = {requested:false,ready:new Promise(resolve => { release=resolve; }),release:()=>release()};
+      held.set(path,gate);return gate;
+    },
+    close: () => { for (const gate of held.values()) gate.release(); return new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve())); },
   };
 }
