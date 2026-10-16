@@ -1,6 +1,6 @@
 {
   "name": "chrome-essentials",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "type": "module",
   "description": "On-demand, self-restoring saved tab groups for Chrome.",

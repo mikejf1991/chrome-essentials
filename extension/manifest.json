@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Essentials",
   "description": "Launch Essentials and custom saved groups, keep their order, and restore tabs at their last in-app address.",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "minimum_chrome_version": "150",
   "permissions": ["tabs", "tabGroups", "storage", "contextMenus", "webNavigation", "alarms"],
   "background": {"service_worker": "background.js", "type": "module"},
