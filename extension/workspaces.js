@@ -82,19 +82,31 @@ export class WorkspacesController {
 
   async saveRuntime() {
     const groups = Object.fromEntries([...this.controllers].map(([id, controller]) => [id, controller.runtime]));
-    await this.api.storage.session.set({ runtime: { version: 2, groups } });
+    const runtime = { version: 2, groups }, serialized = JSON.stringify(runtime);
+    if (serialized !== this.savedRuntime) {
+      await this.api.storage.session.set({ runtime });
+      this.savedRuntime = serialized;
+    }
     const states = [...this.controllers.values()].map(controller => controller.state());
     const active = states.filter(state => state.active).length;
     const warning = this.globalWarning || states.some(state => state.warning);
-    await this.api.action.setBadgeText({ text: warning ? '!' : active > 1 ? String(active) : active ? 'ON' : '' });
-    await this.api.action.setBadgeBackgroundColor({ color: warning ? '#A45218' : '#2458D3' });
-    await this.api.action.setTitle({ title: this.controllers.get(PRIMARY_GROUP_ID)?.runtime.active
-      ? 'Show Essentials · right-click for saved groups' : 'Open Essentials · right-click for saved groups' });
+    const badge = warning ? '!' : active > 1 ? String(active) : active ? 'ON' : '';
+    const title = this.controllers.get(PRIMARY_GROUP_ID)?.runtime.active
+      ? 'Show Essentials · right-click for saved groups' : 'Open Essentials · right-click for saved groups';
+    const presentation = JSON.stringify([badge, Boolean(warning), title]);
+    if (presentation !== this.savedPresentation) {
+      await this.api.action.setBadgeText({ text: badge });
+      await this.api.action.setBadgeBackgroundColor({ color: warning ? '#A45218' : '#2458D3' });
+      await this.api.action.setTitle({ title });
+      this.savedPresentation = presentation;
+    }
+    if (Boolean(active) === this.alarmActive) return;
     if (active) {
       if (!await this.api.alarms.get('essentials-reconcile')) {
         await this.api.alarms.create('essentials-reconcile', { periodInMinutes: 0.5 });
       }
     } else await this.api.alarms.clear('essentials-reconcile');
+    this.alarmActive = Boolean(active);
   }
 
   findTab(tabId) {
@@ -254,7 +266,7 @@ export class WorkspacesController {
     return this.state();
   }
 
-  async dispatch(message, preferredWindowId) {
+  async dispatch(message, preferredWindowId, canFocus) {
     const id = message.workspaceId ?? PRIMARY_GROUP_ID;
     if (message.type === 'createGroup') return this.createGroup(message);
     if (message.type === 'updateGroup') return this.updateGroup(id, message);
@@ -277,7 +289,7 @@ export class WorkspacesController {
       }
     }
     if (message.type === 'launch') this.globalWarning = null;
-    const result = await controller.dispatch(message, preferredWindowId);
+    const result = await controller.dispatch(message, preferredWindowId, canFocus);
     await this.arrangeGroups();
     return { ...this.state(id), ...(result.needsSetup ? { needsSetup: true } : {}) };
   }

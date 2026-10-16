@@ -1,17 +1,14 @@
 import { FRESH_TAB_MS } from './controller.js';
 import { WorkspacesController } from './workspaces.js';
+import { LaunchIntent } from './launch-intent.js';
+import { createEventQueue } from './event-queue.js';
 
 const controller = new WorkspacesController(chrome, { requestReconcile: schedule });
-let queue = controller.init();
+const enqueue = createEventQueue(controller.init());
+const launchIntent = new LaunchIntent();
 let reconcileTimer;
 let reconcileAt = Infinity;
 let browserStarting = false;
-
-function enqueue(operation) {
-  const result = queue.then(operation);
-  queue = result.catch(() => {});
-  return result;
-}
 
 function schedule(delay = 180) {
   const due = Date.now() + delay;
@@ -21,12 +18,12 @@ function schedule(delay = 180) {
   reconcileTimer = setTimeout(() => {
     reconcileTimer = undefined;
     reconcileAt = Infinity;
-    runEvent(() => controller.reconcile());
+    runEvent(() => controller.reconcile(), 'reconcile');
   }, delay);
 }
 
-function runEvent(operation) {
-  return enqueue(operation).catch(error => {
+function runEvent(operation, key) {
+  return enqueue(operation, key).catch(error => {
     // Chrome temporarily rejects edits during native tab dragging. Keep saved
     // state intact and retry after the drag instead of manufacturing extra tabs.
     if (/cannot be edited|dragging|being dragged|not editable/i.test(error.message || '')) {
@@ -69,8 +66,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ ok: false, error: 'Missing Essentials action.' });
     return false;
   }
+  const canFocus = message.type === 'launch' ? launchIntent.begin(sender.tab?.id) : undefined;
   enqueue(async () => {
-    const state = await controller.dispatch(message, sender.tab?.windowId);
+    const state = await controller.dispatch(message, sender.tab?.windowId, canFocus);
     if (['createGroup', 'updateGroup', 'deleteGroup'].includes(message.type)) await setupMenus();
     return state;
   })
@@ -79,12 +77,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true;
 });
 
-chrome.action.onClicked.addListener(tab => runEvent(async () => {
-  const state = await controller.dispatch({ type: 'launch' }, tab.windowId);
-  if (state.needsSetup) await chrome.runtime.openOptionsPage();
-}));
+chrome.action.onClicked.addListener(tab => {
+  const canFocus = launchIntent.begin(tab.id);
+  return runEvent(async () => {
+    const state = await controller.dispatch({ type: 'launch' }, tab.windowId, canFocus);
+    if (state.needsSetup) await chrome.runtime.openOptionsPage();
+  });
+});
 
-chrome.contextMenus.onClicked.addListener((info, tab) => runEvent(async () => {
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  const canFocus = launchIntent.begin(tab?.id);
+  return runEvent(async () => {
   const menuId = String(info.menuItemId);
   if (menuId === 'settings') return chrome.runtime.openOptionsPage();
   if (menuId === 'remove') {
@@ -99,20 +102,28 @@ chrome.contextMenus.onClicked.addListener((info, tab) => runEvent(async () => {
   if (action === 'add') await controller.dispatch({ type: 'addTab', workspaceId, tabId: tab?.id }, tab?.windowId);
   if (action === 'close') await controller.dispatch({ type: 'close', workspaceId });
   if (action === 'launch') {
-    const state = await controller.dispatch({ type: 'launch', workspaceId }, tab?.windowId);
+    const state = await controller.dispatch({ type: 'launch', workspaceId }, tab?.windowId, canFocus);
     if (state.needsSetup) await chrome.runtime.openOptionsPage();
   }
-}));
+  });
+});
 
 chrome.tabs.onCreated.addListener(tab => {
+  if (tab.active) launchIntent.cancel();
   runEvent(() => controller.created(tab)).then(() => schedule());
   // Observe an ordinary new tab outside the group once its initial grouping settles,
   // so a later deliberate drag-in is eligible even if there are no more tab events.
   setTimeout(() => schedule(), FRESH_TAB_MS + 100);
 });
 chrome.tabs.onUpdated.addListener((id, change) => {
+  if ('url' in change) launchIntent.navigation(id);
   if ('groupId' in change) controller.markTabActivity(id);
   if ('groupId' in change || 'url' in change || 'status' in change || 'pinned' in change) schedule();
+});
+chrome.tabs.onActivated.addListener(info => launchIntent.activate(info.tabId));
+chrome.windows.onFocusChanged.addListener(() => launchIntent.cancel());
+chrome.webNavigation.onBeforeNavigate.addListener(details => {
+  if (details.frameId === 0) launchIntent.navigation(details.tabId);
 });
 chrome.tabs.onMoved.addListener((id, info) => {
   if (info.fromIndex === info.toIndex) return;
@@ -146,7 +157,7 @@ chrome.webNavigation.onCommitted.addListener(navigated);
 chrome.webNavigation.onHistoryStateUpdated.addListener(navigated);
 chrome.webNavigation.onReferenceFragmentUpdated.addListener(navigated);
 chrome.alarms.onAlarm.addListener(alarm => {
-  if (alarm.name === 'essentials-reconcile') runEvent(() => controller.reconcile());
+  if (alarm.name === 'essentials-reconcile') runEvent(() => controller.reconcile(), 'reconcile');
 });
 chrome.runtime.onStartup.addListener(() => {
   browserStarting = true;

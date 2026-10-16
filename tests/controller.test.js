@@ -2,6 +2,67 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DROP_SETTLE_MS, EssentialsController } from '../extension/controller.js';
 import { createEntry } from '../extension/model.js';
+import { LaunchIntent } from '../extension/launch-intent.js';
+
+test('a slow Chrome response cannot focus over newer navigation or a second click', async () => {
+  const chrome = fakeChrome([createEntry('https://mail.google.com/', 'Mail', 'mail')]);
+  const controller = new EssentialsController(chrome.api);
+  await controller.init();
+  const intent = new LaunchIntent();
+  const canFocus = intent.begin(7), update = chrome.api.tabs.update;
+  const focused = [];
+  chrome.api.tabs.update = async (id, values) => { if (values.active) focused.push(id); return update(id, values); };
+  let release, reached;
+  const gate = new Promise(resolve => { release = resolve; });
+  const waiting = new Promise(resolve => { reached = resolve; });
+  const group = chrome.api.tabs.group;
+  chrome.api.tabs.group = async options => { reached(); await gate; return group(options); };
+  const launch = controller.launch(1, true, canFocus);
+  await waiting;
+  intent.navigation(7);
+  intent.begin(7); // Repeated click supersedes, never revives, the first intent.
+  release();
+  await launch;
+  assert.deepEqual(focused, []);
+  assert.equal(chrome.tabs.size, 1);
+  await controller.launch(1, true, intent.begin(7));
+  assert.equal(chrome.tabs.size, 1);
+  assert.equal(focused.length, 1);
+});
+
+test('focus rechecks intent after reading a tab and never rewrites its URL', async () => {
+  const {controller,api,tabs} = await launched();
+  const id = controller.state().slots.gmail, intent = new LaunchIntent();
+  const canFocus = intent.begin(id), get = api.tabs.get, updates = [];
+  api.tabs.get = async tabId => { const tab = await get(tabId); intent.cancel(); tabs.get(id).url = 'https://example.com/working'; return tab; };
+  api.tabs.update = async (...args) => { updates.push(args); };
+  await controller.focus(canFocus);
+  assert.deepEqual(updates, []);
+  assert.equal(tabs.get(id).url, 'https://example.com/working');
+});
+
+test('delayed repair preserves newer navigation in the actual restoring tab without any URL update', async () => {
+  const chrome = fakeChrome([createEntry('https://mail.google.com/#inbox', 'Mail', 'mail')]);
+  const controller = new EssentialsController(chrome.api);
+  await controller.init();
+  const intent = new LaunchIntent(), canFocus = intent.begin(7);
+  let release, reached;
+  const gate = new Promise(resolve => { release = resolve; });
+  const waiting = new Promise(resolve => { reached = resolve; });
+  const group = chrome.api.tabs.group, update = chrome.api.tabs.update, extensionUpdates = [];
+  chrome.api.tabs.group = async options => { reached(); await gate; return group(options); };
+  chrome.api.tabs.update = async (id, values) => { extensionUpdates.push({id,values}); return update(id,values); };
+  const launch = controller.launch(1,true,canFocus);
+  await waiting; // Creation and session persistence are done; grouping is delayed.
+  const id = controller.state().slots.mail;
+  await update(id,{url:'https://example.com/newer-user-destination',active:true});
+  intent.activate(id);intent.navigation(id);
+  release();await launch;await controller.reconcile();
+  assert.equal(chrome.tabs.get(id).url,'https://example.com/newer-user-destination');
+  assert.equal(controller.entries[0].lastValidUrl,'https://mail.google.com/#inbox');
+  assert.equal(chrome.tabs.size,1,'a redirected restoring tab pauses without a replacement loop');
+  assert.equal(extensionUpdates.some(call=>Object.hasOwn(call.values,'url')),false);
+});
 
 // This models tab identity, groups, window ownership, and persisted state. Real
 // Chrome integration tests cover event delivery and the native group API.

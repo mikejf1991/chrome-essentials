@@ -98,7 +98,7 @@ npm run test:reload
 npm run package
 ```
 
-The packaging command uses Python's standard library and produces `dist/essentials-0.2.1.zip`. Browser checks create disposable profiles and local fixture pages under `output/playwright`; they never attach to the user's Chrome profile. Set `HEADED=1` to see the test browser. Set `PLAYWRIGHT_MODULE_PATH` only if using a separately installed Playwright runtime.
+The packaging command uses Python's standard library and produces `dist/essentials-0.2.2.zip`. Browser checks create disposable profiles and local fixture pages under `output/playwright`; they never attach to the user's Chrome profile. Set `HEADED=1` to see the test browser. Set `PLAYWRIGHT_MODULE_PATH` only if using a separately installed Playwright runtime.
 
 The real-browser suites cover navigation and SPA/hash history, inherited new-tab exclusion, settled drops and transient crossings, explicit add/remove, ordering after pinned tabs, independent groups, migration, tab detachment and replacement, whole-group moves, sign-in redirects, service-worker restart, extension reload, window closure, and browser startup. Native mouse-drag gesture feel and your apps' particular login flows should also be checked during the first personal trial.
 
@@ -109,3 +109,15 @@ The real-browser suites cover navigation and SPA/hash history, inherited new-tab
 - [Chrome 150 tab-strip context menus](https://developer.chrome.com/docs/extensions/whats-new#chrome_150_tab_strip_context_menus)
 
 Chrome reports closure after it occurs; this extension restores closed tabs rather than canceling the close.
+
+## Responsive launches
+
+Launch focus expires after 1.5 seconds and is canceled by newer launches, tab activation, working-tab navigation or a window focus change. The first available saved tab can be shown before the rest of a group finishes repairing. A slow launch still restores missing saved tabs in the background; it does not later select a tab over your work. Existing working tabs are never navigated to a saved URL: restoration creates a separate tab with its destination supplied in the create call.
+
+Repeated native repair events share one pending repair, and unchanged runtime/presentation state skips storage, toolbar and alarm IPC. This removes redundant work without parallelizing saved-group mutations or adding page access.
+
+Run `node scripts/launch-race-smoke.mjs` for gated Chrome replies, repeated clicks, preserved unsaved input and a simulated 30-second backlog in a disposable profile. The fixture reproduces late focus in the unchanged 0.2.1 release and verifies its prevention here. These are isolated results; actual delays, installed version and app/network timing on an affected machine still need checking there.
+
+The fixture also delays repair after a destination tab has been created and persisted, navigates that same tab to a newer user destination, enters unsaved text, and then releases repair. It verifies the same tab ID, newer URL, unsaved text, and zero extension calls that update an existing tab's URL. This URL-preservation case passes in unchanged 0.2.1 as well. The reported home-machine URL replacement has not been reproduced or explained; it needs the installed source/version and a trace of tab IDs and navigation timing from that machine. The confirmed delayed-focus bug is a separate finding.
+
+A further case holds the initial app HTTP response open, simulates newer user navigation through Chrome's native API before the initial Page is available, and releases the response afterward. Both versions preserve the newer URL and unsaved input. This covers pending initial navigation as well as delayed repair; it is an isolated fixture, not a home-machine reproduction.

@@ -133,14 +133,17 @@ export class EssentialsController {
     }
   }
 
-  async focus() {
-    if (!this.runtime.active) return;
+  async focus(canFocus = () => true) {
+    if (!this.runtime.active || !canFocus()) return false;
     if (this.runtime.groupId !== null) {
       try { await this.api.tabGroups.update(this.runtime.groupId, { collapsed: false }); } catch { /* reconciliation repairs */ }
     }
     const first = this.entries.map(e => this.runtime.slots[e.id]).find(id => Number.isInteger(id));
-    if (first !== undefined && await this.getTab(first)) await this.api.tabs.update(first, { active: true });
-    await this.api.windows.update(this.runtime.ownerWindowId, { focused: true });
+    if (first === undefined || !await this.getTab(first) || !canFocus()) return false;
+    canFocus.expectActivation?.(first);
+    await this.api.tabs.update(first, { active: true });
+    if (canFocus()) await this.api.windows.update(this.runtime.ownerWindowId, { focused: true });
+    return true;
   }
 
   // Manual launches can adopt exact saved URLs from a native restored group.
@@ -206,7 +209,7 @@ export class EssentialsController {
     return true;
   }
 
-  async launch(preferredWindowId, focus = true) {
+  async launch(preferredWindowId, focus = true, canFocus = () => true) {
     this.runtime.warning = null;
     if (!this.entries.length) return { ...this.state(), needsSetup: true };
     const owner = this.runtime.active
@@ -218,8 +221,14 @@ export class EssentialsController {
         this.runtime.ownerWindowId = await this.normalWindow(preferredWindowId);
       }
     }
-    await this.reconcile();
-    if (focus) await this.focus();
+    let focused = false;
+    const focusOnce = async () => {
+      if (!focus || focused || !canFocus() || !this.entries.some(e => Number.isInteger(this.runtime.slots[e.id]))) return;
+      focused = await this.focus(canFocus);
+    };
+    // Show an existing/first restored slot without waiting for every saved app.
+    await focusOnce();
+    await this.reconcile({ onRestored: focusOnce });
     return this.state();
   }
 
@@ -362,7 +371,7 @@ export class EssentialsController {
     await this.api.tabs.update(tab.id, { autoDiscardable: false });
   }
 
-  async reconcile() {
+  async reconcile({ onRestored = async () => {} } = {}) {
     if (!this.runtime.active) return this.state();
     if (!this.entries.length) { await this.deactivate(); return this.state(); }
     const owner = this.runtime.ownerWindowId;
@@ -537,6 +546,7 @@ export class EssentialsController {
       if (returned && returned.windowId === this.runtime.ownerWindowId &&
         returned.groupId === this.runtime.groupId && classifyUrl(entry, returned.url) !== 'outside') continue;
       await this.restore(entry, groupStart);
+      await onRestored();
     }
 
     tabs = this.runtime.groupId === null ? [] : await this.api.tabs.query({ groupId: this.runtime.groupId });
@@ -556,11 +566,11 @@ export class EssentialsController {
     return this.state();
   }
 
-  async dispatch(message, preferredWindowId) {
+  async dispatch(message, preferredWindowId, canFocus) {
     switch (message.type) {
       case 'getState': return this.state();
       case 'getOpenTabs': return { tabs: await this.openTabs() };
-      case 'launch': return this.launch(preferredWindowId);
+      case 'launch': return this.launch(preferredWindowId, true, canFocus);
       case 'close': return this.close();
       case 'addTab': return this.addTab(message.tabId);
       case 'addUrl': return this.addUrl(message.url, message.label, preferredWindowId);
